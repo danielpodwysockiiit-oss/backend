@@ -3,6 +3,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { authenticator } from 'otplib';
 import { execFile } from 'child_process';
+import path from 'path';
 
 const ADMIN = 'typposki';
 const LIMITS = { free: 3, pro: 10, platin: Infinity };
@@ -98,9 +99,16 @@ app.post('/admin/bots', admOk, (q, r) => { if (!['Sicherheit', 'Anti-Bot'].inclu
 app.get('/admin/payments', admOk, (q, r) => r.json(db.payments));
 app.post('/admin/payments/:id', admOk, (q, r) => { const p = db.payments.find((x) => x.id === q.params.id); if (!p) return r.status(404).json({}); p.status = q.body.status === 'done' ? 'done' : 'rejected'; save(); r.json({ ok: true }); });
 
+// ---- TikTok URL-Verifizierung: liefert Dateien wie tiktokXYZ.txt unter /, /terms/ und /privacy/ aus ----
+app.get(/^\/(?:(?:terms|privacy)\/)?(tiktok[\w-]+\.txt)$/, (req, res) => {
+  const f = path.resolve(req.params[0]);
+  if (!fs.existsSync(f)) return res.status(404).send('not found');
+  res.type('text/plain').sendFile(f);
+});
+
 // ---- Rechtstexte (für TikTok-App-Prüfung) ----
 const page = (title, body) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;line-height:1.6}</style></head><body><h1>${title}</h1>${body}</body></html>`;
-const CONTACT = process.env.CONTACT_EMAIL || 'support-tikbot@proton.me';
+const CONTACT = process.env.CONTACT_EMAIL || 'kontakt@example.com';
 app.get('/terms', (req, res) => res.send(page('Terms of Service / Nutzungsbedingungen', `
 <p><i>Last updated: 2026-10-19</i></p>
 <h2>1. Service</h2><p>TikBot helps users create TikTok videos with suggested hashtags and sounds. You sign in with your TikTok account.</p>
