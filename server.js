@@ -97,4 +97,4 @@ app.post('/admin/bots', admOk, (q, r) => { if (!['Sicherheit', 'Anti-Bot'].inclu
 app.get('/admin/payments', admOk, (q, r) => r.json(db.payments));
 app.post('/admin/payments/:id', admOk, (q, r) => { const p = db.payments.find((x) => x.id === q.params.id); if (!p) return r.status(404).json({}); p.status = q.body.status === 'done' ? 'done' : 'rejected'; save(); r.json({ ok: true }); });
 
-app.listen(3000, () => console.log('API :3000'));
+app.listen(process.env.PORT || 3000, () => console.log('API läuft'));
