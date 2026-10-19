@@ -1,3 +1,4 @@
+import { execFile } from 'child_process';
 import express from 'express';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -96,5 +97,11 @@ app.get('/admin/bots', admOk, (q, r) => r.json(db.bots));
 app.post('/admin/bots', admOk, (q, r) => { if (!['Sicherheit', 'Anti-Bot'].includes(q.body.role)) return r.status(400).json({}); db.bots.push({ id: crypto.randomUUID(), name: q.body.name, role: q.body.role }); save(); r.json({ ok: true }); });
 app.get('/admin/payments', admOk, (q, r) => r.json(db.payments));
 app.post('/admin/payments/:id', admOk, (q, r) => { const p = db.payments.find((x) => x.id === q.params.id); if (!p) return r.status(404).json({}); p.status = q.body.status === 'done' ? 'done' : 'rejected'; save(); r.json({ ok: true }); });
+
+app.post('/bot/run', (req, res) => {
+  if (!process.env.BOT_SECRET || req.headers['x-bot-secret'] !== process.env.BOT_SECRET) return res.status(403).json({ error: 'forbidden' });
+  execFile('node', ['bot.js'], (err, out) => console.log(err || out));
+  res.json({ started: true });
+});
 
 app.listen(process.env.PORT || 3000, () => console.log('API läuft'));
