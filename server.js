@@ -18,22 +18,27 @@ const ip = (r) => r.ip;
 const today = () => new Date().toISOString().slice(0, 10);
 const ban = (u, reason, permanent = false) => { u.banned = { reason, permanent, ip: !!permanent }; save(); };
 
-// ---- Login (TikTok OAuth: serverseitig Code gegen open_id tauschen, hier vereinfacht) ----
-app.post('/login', (req, res) => {
-  const { openId, handle } = req.body;
-  if (!openId || !handle) return res.status(400).json({ error: 'missing' });
-  if (db.ipBans.includes(ip(req))) return res.json({ banned: { reason: 'IP-Ban', permanent: true } });
+// ---- Login: nur über echten TikTok-Login (siehe /auth/tiktok/start) ----
+const nonces = new Set();
+function doLogin(openId, handle, addr) {
+  if (db.ipBans.includes(addr)) return { banned: { reason: 'IP-Ban', permanent: true } };
   let u = db.users[openId] ||= { openId, handle, plan: 'free', planLocked: false, used: 0, day: today(), ips: [], banned: null };
-  if (!u.ips.includes(ip(req))) u.ips.push(ip(req));
+  u.handle = handle;
+  if (!u.ips.includes(addr)) u.ips.push(addr);
   // IP-Limit: max. 2 Accounts pro IP
-  const onIp = Object.values(db.users).filter((x) => x.ips.includes(ip(req)));
+  const onIp = Object.values(db.users).filter((x) => x.ips.includes(addr));
   if (onIp.length > 2 && handle !== ADMIN && !u.banned) {
     u.plan = 'free'; u.planLocked = true;
     ban(u, 'Anti-Bot: Mehr als 2 Accounts pro IP (Botting)');
   }
   const token = crypto.randomUUID();
   db.sessions[token] = openId; save();
-  res.json({ token, banned: u.banned });
+  return { token, banned: u.banned };
+}
+app.get('/auth/tiktok/start', (req, res) => {
+  const state = crypto.randomUUID(); nonces.add(state);
+  const q = new URLSearchParams({ client_key: process.env.TIKTOK_CLIENT_KEY, scope: 'user.info.basic,user.info.profile', response_type: 'code', redirect_uri: process.env.PUBLIC_URL + '/tiktok/callback', state });
+  res.redirect('https://www.tiktok.com/v2/auth/authorize/?' + q);
 });
 const auth = (req, res, next) => {
   const u = db.users[db.sessions[req.headers.authorization]];
@@ -136,11 +141,20 @@ app.get('/tiktok/connect', (req, res) => {
   res.redirect('https://www.tiktok.com/v2/auth/authorize/?' + q);
 });
 app.get('/tiktok/callback', async (req, res) => {
-  if (req.query.state !== process.env.BOT_SECRET || !req.query.code) return res.status(403).send('forbidden');
+  const isBot = req.query.state === process.env.BOT_SECRET;
+  if (!req.query.code || !(isBot || nonces.delete(req.query.state))) return res.status(403).send('forbidden');
   const r = await fetch('https://open.tiktokapis.com/v2/oauth/token/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_key: process.env.TIKTOK_CLIENT_KEY, client_secret: process.env.TIKTOK_CLIENT_SECRET, code: req.query.code, grant_type: 'authorization_code', redirect_uri: PUBLIC_URL + '/tiktok/callback' }) });
   const t = await r.json();
   if (!t.access_token) return res.status(400).send('Fehler: ' + JSON.stringify(t));
+  if (!isBot) {
+    const ui = await (await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,username', { headers: { Authorization: 'Bearer ' + t.access_token } })).json();
+    const d = ui.data?.user;
+    if (!d) return res.status(400).send('Fehler: ' + JSON.stringify(ui));
+    const out = doLogin(d.open_id, d.username || d.display_name, ip(req));
+    const link = 'tikbot://login?' + (out.token ? 'token=' + out.token : 'banned=' + encodeURIComponent(out.banned.reason));
+    return res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;text-align:center;padding:40px"><h2>Anmeldung erfolgreich</h2><p><a href="${link}" style="font-size:20px">Zurück zur App</a></p><script>location.href=${JSON.stringify(link)}</script></body>`);
+  }
   fs.writeFileSync('./tokens.json', JSON.stringify({ access_token: t.access_token, refresh_token: t.refresh_token, expires_at: Date.now() + t.expires_in * 1000 }));
   res.send('Bot-Account verbunden. Du kannst dieses Fenster schließen.');
 });
