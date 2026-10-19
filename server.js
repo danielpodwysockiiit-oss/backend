@@ -100,7 +100,7 @@ app.post('/admin/payments/:id', admOk, (q, r) => { const p = db.payments.find((x
 
 // ---- Rechtstexte (für TikTok-App-Prüfung) ----
 const page = (title, body) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;line-height:1.6}</style></head><body><h1>${title}</h1>${body}</body></html>`;
-const CONTACT = process.env.CONTACT_EMAIL || 'kontakt@example.com';
+const CONTACT = process.env.CONTACT_EMAIL || 'support-tikbot@proton.me';
 app.get('/terms', (req, res) => res.send(page('Terms of Service / Nutzungsbedingungen', `
 <p><i>Last updated: 2026-10-19</i></p>
 <h2>1. Service</h2><p>TikBot helps users create TikTok videos with suggested hashtags and sounds. You sign in with your TikTok account.</p>
